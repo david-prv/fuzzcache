@@ -318,52 +318,54 @@ function sqlWrapperFunc($funcName, $args)
             return str_replace($BAD_CHARS, $GOOD_CHARS, $args[1]);
         case "mysqli_query":
             if (checkSqlSyntax($args[1])) {
-                // can use phpmyadmin or antlr
-                // cause an error and report back to fuzzer!
-
+                // 可以使用 phpmyadmin 或 antlr 来检测 SQL 语法，
+                // 这里可以报错并通知模糊测试器
             }
             $table = extractTableName($args[1]);
+            // 如果解析失败，则记录日志，并设置默认表名
+            if (!is_array($table) || count($table) < 2) {
+                error_log("[FuzzCache] Warning: extractTableName failed for SQL: " . var_export($args[1], true));
+                $table = array("", "unknown_table");
+            }
             $tablehash = $table[1];
             $queryhash = hexdec(crc32($args[1]));
             if ($table[0] === 'SELECT') {
                 $table2query = read(PHPTrace::$bitmapSHMKey);
-                $table2query = ($table2query!== false)? $table2query: array(); 
-                if(array_key_exists($tablehash , $table2query) 
-                && array_key_exists($queryhash, $table2query[$tablehash]) 
-                && $table2query[$tablehash][$queryhash] === 1 ) {
-                    // valid, then we can directly return the results;
-                    //return read($queryhash);
-                    //return end(PHPTrace::$trace)["ret"]; // return the index;
-                    //print("[query]: SELECT: valid cache\n");
+                if (!is_array($table2query)) {
+                    error_log("[FuzzCache] Warning: read(PHPTrace::$bitmapSHMKey) returned non-array. Fallback to empty array.");
+                    $table2query = array();
                 }
-                else{
-                    $allData = PHPTrace::redoQuery(IDX(end(PHPTrace::$trace)["ret"])); // should give idx of query// default the last one
+                if (array_key_exists($tablehash, $table2query) 
+                    && is_array($table2query[$tablehash]) 
+                    && array_key_exists($queryhash, $table2query[$tablehash]) 
+                    && $table2query[$tablehash][$queryhash] === 1 ) {
+                    // 缓存命中，可以直接返回结果（此处略）
+                } else {
+                    $allData = PHPTrace::redoQuery(IDX(end(PHPTrace::$trace)["ret"])); // 重新执行查询
                     write($queryhash, $allData);
+                    if (!isset($table2query[$tablehash]) || !is_array($table2query[$tablehash])) {
+                        $table2query[$tablehash] = array();
+                    }
                     $table2query[$tablehash][$queryhash] = 1;
                     write(PHPTrace::$bitmapSHMKey, $table2query);
-                    // data is in cache and valid
-                    //return $allData;
-                    //print("[query]: SELECT: invalid cache\n");
+                    // 此处可返回 $allData 或做其它处理
                 }
-            }
-            else if ($table[0] === 'UPDATE' || $table[0] === 'INSERT') {
-                
+            } else if ($table[0] === 'UPDATE' || $table[0] === 'INSERT') {
                 $allData = PHPTrace::redoQuery(IDX(end(PHPTrace::$trace)["ret"]));
                 write($queryhash, $allData);
-                // update 
                 $table2query = read(PHPTrace::$bitmapSHMKey);
-                if(array_key_exists($tablehash , $table2query)) {
-                    foreach ($table2query[$tablehash] as $sql) {
+                if (!is_array($table2query)) {
+                    error_log("[FuzzCache] Warning: read(PHPTrace::$bitmapSHMKey) returned non-array. Fallback to empty array.");
+                    $table2query = array();
+                }
+                if (array_key_exists($tablehash, $table2query)) {
+                    foreach ($table2query[$tablehash] as $sql => $value) {
                         $table2query[$tablehash][$sql] = 0;
                     }
                     write(PHPTrace::$bitmapSHMKey, $table2query);
                 }
             }
-            else{
-                //print($args[1]);
-            }
-
-            return end(PHPTrace::$trace)["ret"]; // return the index;
+            return end(PHPTrace::$trace)["ret"]; // 返回索引
 
         case "mysqli_close":
         case "mysqli_error":
@@ -376,28 +378,36 @@ function sqlWrapperFunc($funcName, $args)
         case "mysqli_fetch_all":   
         case "mysqli_num_rows": 
             $resultIdx = IDX($args[0]);
-            
             $queryhash = hexdec(crc32(PHPTrace::$trace[$resultIdx]["args"][1]));
             $table = extractTableName(PHPTrace::$trace[$resultIdx]["args"][1]);
+            // 检查 extractTableName 的返回值
+            if (!is_array($table) || count($table) < 2) {
+                error_log("[FuzzCache] Warning: extractTableName failed for SQL: " . var_export(PHPTrace::$trace[$resultIdx]["args"][1], true));
+                $table = array("", "unknown_table");
+            }
             $tablehash = $table[1];
             $table2query = read(PHPTrace::$bitmapSHMKey);
-
-            if(array_key_exists($tablehash , $table2query) 
-            && array_key_exists($queryhash, $table2query[$tablehash]) 
-            && $table2query[$tablehash][$queryhash] === 1 ) {
-                // valid, then we can directly return the results;
-                //print("[fetch]: valid sql cached\n");
-                $allData = read($queryhash);
+            if (!is_array($table2query)) {
+                error_log("[FuzzCache] Warning: read(PHPTrace::$bitmapSHMKey) returned non-array. Fallback to empty array.");
+                $table2query = array();
             }
-            else{
-                //print("[fetch]: invalid sql and redo!\n");
-                $allData = PHPTrace::redoQuery($resultIdx); // should give idx of query//
+            if (array_key_exists($tablehash, $table2query) 
+                && is_array($table2query[$tablehash]) 
+                && array_key_exists($queryhash, $table2query[$tablehash]) 
+                && $table2query[$tablehash][$queryhash] === 1 ) {
+                // 缓存命中，直接读取缓存结果
+                $allData = read($queryhash);
+            } else {
+                // 缓存未命中，重新执行查询
+                $allData = PHPTrace::redoQuery($resultIdx);
                 write($queryhash, $allData);
+                if (!isset($table2query[$tablehash]) || !is_array($table2query[$tablehash])) {
+                    $table2query[$tablehash] = array();
+                }
                 $table2query[$tablehash][$queryhash] = 1;
                 write(PHPTrace::$bitmapSHMKey, $table2query);
-                // data is in cache and valid
             }
-            return ($funcName === "mysqli_num_rows")? count($allData): $allData;
+            return ($funcName === "mysqli_num_rows") ? count($allData) : $allData;
         case "mysqli_fetch_lengths":
             return array(0);
         }

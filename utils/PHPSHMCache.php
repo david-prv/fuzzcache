@@ -318,11 +318,11 @@ function sqlWrapperFunc($funcName, $args)
             return str_replace($BAD_CHARS, $GOOD_CHARS, $args[1]);
         case "mysqli_query":
             if (checkSqlSyntax($args[1])) {
-                // 可以使用 phpmyadmin 或 antlr 来检测 SQL 语法，
-                // 这里可以报错并通知模糊测试器
+                // You can use phpmyadmin or antlr to check SQL syntax.
+                // Here you can report an error and notify the fuzz tester
             }
             $table = extractTableName($args[1]);
-            // 如果解析失败，则记录日志，并设置默认表名
+            // If parsing fails, log and set the default table name
             if (!is_array($table) || count($table) < 2) {
                 error_log("[FuzzCache] Warning: extractTableName failed for SQL: " . var_export($args[1], true));
                 $table = array("", "unknown_table");
@@ -339,16 +339,16 @@ function sqlWrapperFunc($funcName, $args)
                     && is_array($table2query[$tablehash]) 
                     && array_key_exists($queryhash, $table2query[$tablehash]) 
                     && $table2query[$tablehash][$queryhash] === 1 ) {
-                    // 缓存命中，可以直接返回结果（此处略）
+                    // Cache hit, can return results directly (omitted here)
                 } else {
-                    $allData = PHPTrace::redoQuery(IDX(end(PHPTrace::$trace)["ret"])); // 重新执行查询
+                    $allData = PHPTrace::redoQuery(IDX(end(PHPTrace::$trace)["ret"])); // Re-execute the query
                     write($queryhash, $allData);
                     if (!isset($table2query[$tablehash]) || !is_array($table2query[$tablehash])) {
                         $table2query[$tablehash] = array();
                     }
                     $table2query[$tablehash][$queryhash] = 1;
                     write(PHPTrace::$bitmapSHMKey, $table2query);
-                    // 此处可返回 $allData 或做其它处理
+                    // Here you can return $allData or do something else.
                 }
             } else if ($table[0] === 'UPDATE' || $table[0] === 'INSERT') {
                 $allData = PHPTrace::redoQuery(IDX(end(PHPTrace::$trace)["ret"]));
@@ -365,7 +365,7 @@ function sqlWrapperFunc($funcName, $args)
                     write(PHPTrace::$bitmapSHMKey, $table2query);
                 }
             }
-            return end(PHPTrace::$trace)["ret"]; // 返回索引
+            return end(PHPTrace::$trace)["ret"]; // Return index
 
         case "mysqli_close":
         case "mysqli_error":
@@ -373,14 +373,14 @@ function sqlWrapperFunc($funcName, $args)
             return true; // usually no return value
         
         case "mysqli_fetch_assoc":
-        case  "mysqli_fetch_array":
+        case "mysqli_fetch_array":
         case "mysqli_fetch_row":
         case "mysqli_fetch_all":   
         case "mysqli_num_rows": 
             $resultIdx = IDX($args[0]);
             $queryhash = hexdec(crc32(PHPTrace::$trace[$resultIdx]["args"][1]));
             $table = extractTableName(PHPTrace::$trace[$resultIdx]["args"][1]);
-            // 检查 extractTableName 的返回值
+            // Check the return value of extractTableName.
             if (!is_array($table) || count($table) < 2) {
                 error_log("[FuzzCache] Warning: extractTableName failed for SQL: " . var_export(PHPTrace::$trace[$resultIdx]["args"][1], true));
                 $table = array("", "unknown_table");
@@ -395,10 +395,10 @@ function sqlWrapperFunc($funcName, $args)
                 && is_array($table2query[$tablehash]) 
                 && array_key_exists($queryhash, $table2query[$tablehash]) 
                 && $table2query[$tablehash][$queryhash] === 1 ) {
-                // 缓存命中，直接读取缓存结果
+                // Cache hit, read the cached result directly
                 $allData = read($queryhash);
             } else {
-                // 缓存未命中，重新执行查询
+                // Cache miss, re-execute query
                 $allData = PHPTrace::redoQuery($resultIdx);
                 write($queryhash, $allData);
                 if (!isset($table2query[$tablehash]) || !is_array($table2query[$tablehash])) {

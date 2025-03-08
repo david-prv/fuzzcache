@@ -62,7 +62,7 @@ class ModifyWhileLoopVisitor extends PhpParser\NodeVisitorAbstract
     }
     private function isMysqliQueryCall(Node\Expr\FuncCall $node)
     {
-        return $node->name instanceof Node\Name && in_array($node->name->toString(), ['mysqli_connect', 'mysqli_query', "mysqli_close", "mysqli_error", "mysqli_connect_error", "mysqli_fetch_assoc", 'mysqli_num_rows', "mysqli_fetch_array", "mysqli_fetch_row", "mysqli_fetch_all"]);
+        return $node->name instanceof Node\Name && in_array($node->name->toString(), ['mysqli_connect', 'mysqli_query', "mysqli_close", "mysqli_error", "mysqli_connect_error", "mysqli_fetch_assoc", 'mysqli_num_rows', "mysqli_fetch_array", "mysqli_fetch_row", "mysqli_fetch_all", "mysqli_real_escape_string", "mysqli_fetch_lengths"]);
     }
 
     private function isMysqliFetchAssocLoop(Node\Stmt\While_ $whileNode)

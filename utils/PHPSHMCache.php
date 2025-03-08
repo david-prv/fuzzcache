@@ -290,13 +290,18 @@ class PHPTrace
         . getStack() . "\n----\n";
         for($i = 0; $i < count(self::$trace); $i ++) {
             $t = self::$trace[$i];
+
+            $args = array_map(function ($arg) {
+                return is_object($arg) ? get_class($arg) : (string)$arg;
+            }, $t["args"]);
+
             $log .= $i . ": " . $t["funcName"]. "("
-            . implode(",", $t["args"])
+            . implode(",", $args)
             . ")@"
             . dechex($t["ret"])
             . "\n";
         }
-        $customLogFile = "/tmp/php.log";
+        $customLogFile = "./php.log";
         error_log($log, 3, $customLogFile);
     }
 }
